@@ -6,6 +6,7 @@ const {
     GatewayIntentBits,
     SlashCommandBuilder,
     PermissionFlagsBits,
+    EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
@@ -13,8 +14,7 @@ const {
     TextInputBuilder,
     TextInputStyle,
     InteractionType,
-    parseEmoji,
-    MessageFlags
+    parseEmoji
 } = require('discord.js');
 
 // ==========================================
@@ -24,12 +24,19 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN || "";
 const PORT = parseInt(process.env.PORT || "8888", 10);
 const DB_PATH = process.env.DB_PATH || "database.db";
 
-const GIF_URL = "[https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025](https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025)&";
+// ใช้รูปภาพ URL สำรองที่เสถียรเพื่อป้องกันปัญหา URL หมดอายุ
+const GIF_URL = "https://i.imgur.com/wSTFkRM.png";
+
+const COLOR_PRIMARY = 0x5865F2; // Discord Blurple
+const COLOR_SUCCESS = 0x2ECC71; // Emerald Green
+const COLOR_ERROR   = 0xE74C3C; // Crimson Red
+const COLOR_INFO    = 0x3498DB; // Cyber Blue
+const COLOR_ACCENT  = 0xF1C40F; // Gold
 
 const DEFAULT_SETTINGS = {
     roblox_group_id: 33852603,
-    roblox_group_url: "[https://www.roblox.com/groups/33852603](https://www.roblox.com/groups/33852603)",
-    roblox_map_url: "[https://www.roblox.com/games/17709721251](https://www.roblox.com/games/17709721251)",
+    roblox_group_url: "https://www.roblox.com/groups/33852603",
+    roblox_map_url: "https://www.roblox.com/games/17709721251",
     verified_role_id: "1540716342120939550",
     developer_role_id: "1420812428740133016",
     verified_emoji: "✅",
@@ -58,7 +65,7 @@ const DEFAULT_SETTINGS = {
 const DEVELOPER_IDS = [2769442731];
 
 // ==========================================
-// DATABASE UTILITIES
+// DATABASE UTILITIES (sqlite3)
 // ==========================================
 const db = new sqlite3.Database(DB_PATH);
 
@@ -165,21 +172,13 @@ function getSafeEmoji(emojiStr) {
     return emojiStr;
 }
 
-function formatEmojiForComponent(emojiStr) {
-    const safe = getSafeEmoji(emojiStr);
-    if (typeof safe === 'object' && safe.name) {
-        return safe.id ? { id: safe.id, name: safe.name } : { name: safe.name };
-    }
-    return { name: String(safe) };
-}
-
 // ==========================================
 // ROBLOX API HELPER FUNCTIONS
 // ==========================================
 async function getRobloxInfoByName(username) {
     try {
         const response = await axios.post(
-            "[https://users.roblox.com/v1/usernames/users](https://users.roblox.com/v1/usernames/users)",
+            "https://users.roblox.com/v1/usernames/users",
             { usernames: [username], excludeBannedUsers: true },
             { timeout: 15000 }
         );
@@ -198,7 +197,7 @@ async function getRobloxInfoByName(username) {
 async function checkGroupMembership(robloxId, groupId) {
     try {
         const response = await axios.get(
-            `[https://groups.roblox.com/v1/users/$](https://groups.roblox.com/v1/users/$){robloxId}/groups/roles`,
+            `https://groups.roblox.com/v1/users/${robloxId}/groups/roles`,
             { timeout: 15000 }
         );
         if (response.data && response.data.data) {
@@ -259,7 +258,7 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
         guild = client.guilds.cache.first();
     }
     if (!guild) {
-        return { rankVal: null, displayName: null, rankName: null, errMsg: "ไม่พบเซิร์ฟเวอร์ Discord ของบอท" };
+        return { rankVal: null, displayName: null, rankName: null, prefix: "", errMsg: "ไม่พบเซิร์ฟเวอร์ Discord ของบอท" };
     }
 
     const settings = await getGuildSettings(guild.id);
@@ -284,12 +283,14 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
 
         let nickname = "";
         let displayRankName = "";
+        let prefix = "";
 
         if (isDev) {
             const devRoleId = parseId(settings.developer_role_id);
             if (devRoleId) newRoleIds.add(devRoleId);
             nickname = `ผู้ดูแลระบบ | ${robloxUsername}`;
             displayRankName = "Developer";
+            prefix = "ผู้ดูแลระบบ";
         } else if (groupInfo.isInGroup) {
             const rVal = groupInfo.rankVal;
             let rankRoleId = null;
@@ -302,7 +303,7 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
 
             if (rankRoleId) newRoleIds.add(rankRoleId);
 
-            const prefix = getPrefixForRank(rVal, groupInfo.rankName, settings);
+            prefix = getPrefixForRank(rVal, groupInfo.rankName, settings);
             nickname = prefix ? `${prefix} | ${robloxUsername}` : robloxUsername;
             displayRankName = groupInfo.rankName || "ไม่ทราบชื่อยศ";
         } else {
@@ -310,6 +311,7 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
             if (guestRoleId) newRoleIds.add(guestRoleId);
             nickname = `Guest | ${robloxUsername}`;
             displayRankName = "Guest";
+            prefix = "Guest";
         }
 
         await member.roles.set(Array.from(newRoleIds));
@@ -319,6 +321,7 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
             rankVal: isDev ? 999 : groupInfo.rankVal,
             displayName: member.displayName,
             rankName: displayRankName,
+            prefix: prefix,
             errMsg: null
         };
     } catch (error) {
@@ -328,235 +331,8 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
         } else if (error.code === 10007) {
             msg = "ไม่พบคุณใน Discord Server นี้ (อาจยังไม่ได้เข้าเซิร์ฟเวอร์)";
         }
-        return { rankVal: null, displayName: null, rankName: null, errMsg: msg };
+        return { rankVal: null, displayName: null, rankName: null, prefix: "", errMsg: msg };
     }
-}
-
-// ==========================================
-// ULTRA ADVANCED COMPONENTS V2 BUILDERS
-// ==========================================
-
-// 1. หน้า UI หลัก (ยืนยันตัวตน)
-function buildMainVerifyUI(guild, vEmoji = "✅") {
-    const guildIcon = guild && guild.iconURL() ? guild.iconURL() : null;
-
-    const componentsList = [
-        // Header Section พร้อม Thumbnail มุมขวา
-        {
-            type: 9, // Section
-            components: [
-                {
-                    type: 10,
-                    content: `# 🛡️ ROBLOX VERIFICATION SYSTEM\n### ระบบยืนยันตัวตนและจัดการยศอัตโนมัติ`
-                }
-            ],
-            accessory: guildIcon ? {
-                type: 11, // Thumbnail Image
-                media: { url: guildIcon }
-            } : undefined
-        },
-        {
-            type: 14, // Separator
-            divider: true,
-            spacing: 1
-        },
-        // Content Body Section
-        {
-            type: 10,
-            content: 
-                "ยินดีต้อนรับสู่ระบบยืนยันตัวตน! กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเชื่อมโยงบัญชี Discord ของคุณเข้ากับ Roblox\n\n" +
-                "**📌 สิ่งที่คุณต้องเตรียมพร้อม:**\n" +
-                "└ 👤 **Roblox Username** (ชื่อผู้ใช้ของคุณ)\n" +
-                "└ 🛡️ **Roblox Group** (เข้าร่วมกลุ่มให้เรียบร้อย)\n" +
-                "└ 🎮 **Verification Game** (เข้าเล่นแมพที่ระบบส่งให้ตามลิงก์)\n" +
-                "└ 💬 พิมพ์คำว่า `ยืนยัน` ภายในเกมเพื่อเสร็จสิ้นขั้นตอน"
-        },
-        // Media Banner
-        {
-            type: 12, // Media Gallery
-            items: [{ media: { url: GIF_URL } }]
-        },
-        {
-            type: 14,
-            divider: true,
-            spacing: 1
-        },
-        // Footer Section พร้อม ปุ่มกด
-        {
-            type: 9, // Section
-            components: [
-                {
-                    type: 10,
-                    content: "*Roblox Verification Management System • Dev by: dewanoi123*"
-                }
-            ],
-            accessory: {
-                type: 2, // Button
-                custom_id: "persistent_verify",
-                label: "ยืนยันตัวตนที่นี่",
-                style: 1, // Primary Blue
-                emoji: formatEmojiForComponent(vEmoji)
-            }
-        }
-    ];
-
-    return [{
-        type: 17, // Container
-        components: componentsList.filter(c => c.accessory !== undefined || c.type !== 9)
-    }];
-}
-
-// 2. หน้า UI สำหรับผู้ที่ยืนยันตัวตนแล้ว (Re-Verify)
-function buildAlreadyVerifiedUI(username, robloxId, safeVEmoji) {
-    return [{
-        type: 17,
-        components: [
-            {
-                type: 10,
-                content: 
-                    "# ✨ บัญชีนี้ได้รับการยืนยันตัวตนแล้ว\n" +
-                    "ข้อมูลบัญชีของคุณถูกผูกกับระบบอย่างสมบูรณ์แล้ว สามารถกดปุ่มด้านล่างเพื่ออัปเดทยศหรือเปลี่ยนบัญชีผู้ใช้"
-            },
-            {
-                type: 14,
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 10,
-                content: 
-                    "```yaml\n" +
-                    `USER : ${username}\n` +
-                    `ID   : ${robloxId}\n` +
-                    `STATUS: VERIFIED\n` +
-                    "```"
-            },
-            {
-                type: 14,
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 1, // ActionRow
-                components: [
-                    {
-                        type: 2,
-                        custom_id: "update_rank",
-                        label: "อัปเดทยศ",
-                        style: 3, // Success Green
-                        emoji: { name: "🔄" }
-                    },
-                    {
-                        type: 2,
-                        custom_id: "change_acc",
-                        label: "เปลี่ยน Account",
-                        style: 2, // Secondary Gray
-                        emoji: { name: "🔁" }
-                    }
-                ]
-            }
-        ]
-    }];
-}
-
-// 3. หน้า UI ขั้นตอนถัดไป (เข้าเกม)
-function buildPendingGameUI(correctName, robloxId, mapUrl) {
-    return [{
-        type: 17,
-        components: [
-            {
-                type: 10,
-                content: 
-                    "# 📥 ขั้นตอนถัดไป: ยืนยันตัวตนในเกม\n" +
-                    "ระบบบันทึกข้อมูลของคุณเรียบร้อยแล้ว โปรดเข้าสู่เกมตามลิงก์ด้านล่างเพื่อกดยืนยันขั้นตอนสุดท้าย"
-            },
-            {
-                type: 14,
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 10,
-                content: 
-                    `> 👤 **Roblox Username:** \`${correctName}\`\n` +
-                    `> 🆔 **Roblox ID:** \`${robloxId}\`\n\n` +
-                    `➡️ **[คลิกที่นี่เพื่อเข้าสู่แมพยืนยันตัวตน](${mapUrl})**`
-            },
-            {
-                type: 14,
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 10,
-                content: "⏳ *ระบบกำลังรอสัญญาณยืนยันการทำรายการจากภายในเกม...*"
-            }
-        ]
-    }];
-}
-
-// 4. UI แจ้งเตือนข้อผิดพลาด
-function buildErrorUI(title, description) {
-    return [{
-        type: 17,
-        components: [
-            {
-                type: 10,
-                content: `# ❌ ${title}\n${description}`
-            }
-        ]
-    }];
-}
-
-// 5. UI แจ้งเตือนความสำเร็จ
-function buildSuccessUI(title, description) {
-    return [{
-        type: 17,
-        components: [
-            {
-                type: 10,
-                content: `# 🎉 ${title}\n${description}`
-            }
-        ]
-    }];
-}
-
-// 6. UI แสดงการตั้งค่าเซิร์ฟเวอร์
-function buildSettingsUI(settings) {
-    const roleIds = settings.role_ids || {};
-    const vEmoji = settings.verified_emoji || "✅";
-
-    return [{
-        type: 17,
-        components: [
-            {
-                type: 10,
-                content: "# ⚙️ SERVER CONFIGURATIONS"
-            },
-            {
-                type: 14,
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 10,
-                content: 
-                    "### 📌 General Settings\n" +
-                    `└ **Roblox Group ID:** \`${settings.roblox_group_id}\`\n` +
-                    `└ **Verified Role ID:** \`${settings.verified_role_id}\`\n` +
-                    `└ **Verification Emoji:** ${vEmoji}\n\n` +
-                    "### 🎭 Role Binding IDs\n" +
-                    "```ini\n" +
-                    `[OR]     = ${roleIds.or || 'Not Set'}\n` +
-                    `[CD]     = ${roleIds.cd || 'Not Set'}\n` +
-                    `[OF LOW] = ${roleIds.of_low || 'Not Set'}\n` +
-                    `[OF HIGH]= ${roleIds.of_high || 'Not Set'}\n` +
-                    `[HQ]     = ${roleIds.hq || 'Not Set'}\n` +
-                    `[GUEST]  = ${roleIds.guest || 'Not Set'}\n` +
-                    "```"
-            }
-        ]
-    }];
 }
 
 // ==========================================
@@ -571,7 +347,30 @@ const client = new Client({
     ]
 });
 
-client.once('ready', async () => {
+// ฟังก์ชันสร้างปุ่มกดหน้าหลัก (ปรับสถานะปุ่มตามที่ต้องการ)
+function createVerifyActionRow(isVerified = false, vEmoji = "✅") {
+    const safeEmoji = getSafeEmoji(vEmoji);
+
+    // ปุ่ม ยืนยันตัวตนที่นี่ (ถ้ายืนยันแล้วจะเป็นสีเทา กดไม่ได้)
+    const btnVerify = new ButtonBuilder()
+        .setCustomId("persistent_verify")
+        .setLabel("ยืนยันตัวตนที่นี่")
+        .setStyle(isVerified ? ButtonStyle.Secondary : ButtonStyle.Primary)
+        .setEmoji(safeEmoji)
+        .setDisabled(isVerified);
+
+    // ปุ่ม เช็คบทบาท (ถ้ายังไม่ยืนยันจะเป็นสีเทา กดไม่ได้ / ถ้ายืนยันแล้วจะเป็นสีเขียว กดได้)
+    const btnCheckRole = new ButtonBuilder()
+        .setCustomId("check_role")
+        .setLabel("เช็คบทบาท")
+        .setStyle(isVerified ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setEmoji("🔍")
+        .setDisabled(!isVerified);
+
+    return new ActionRowBuilder().addComponents(btnVerify, btnCheckRole);
+}
+
+client.once('clientReady', async () => {
     console.log(`[BOT] Logged in as ${client.user.tag}`);
 
     const commands = [
@@ -593,11 +392,6 @@ client.once('ready', async () => {
         new SlashCommandBuilder()
             .setName("ล้างข้อมูล")
             .setDescription("ลบข้อมูลการยืนยันตัวตนทุกคน")
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-        new SlashCommandBuilder()
-            .setName("ล้างข้อมูลทั้งหมด")
-            .setDescription("ลบข้อมูลการยืนยันตัวตนทุกคน (คำสั่งเดิม)")
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
         new SlashCommandBuilder()
@@ -663,172 +457,338 @@ client.once('ready', async () => {
 // INTERACTION HANDLERS
 // ==========================================
 client.on('interactionCreate', async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-        const { commandName } = interaction;
+    try {
+        if (interaction.isChatInputCommand()) {
+            const { commandName } = interaction;
 
-        if (commandName === "ยืนยันตัวตน") {
-            const settings = await getGuildSettings(interaction.guildId);
-            const vEmoji = settings.verified_emoji || "✅";
+            if (commandName === "ยืนยันตัวตน") {
+                const settings = await getGuildSettings(interaction.guildId);
+                const vEmoji = settings.verified_emoji || "✅";
 
-            await interaction.channel.send({
-                components: buildMainVerifyUI(interaction.guild, vEmoji),
-                flags: MessageFlags.IsComponentsV2
-            });
+                const embed = new EmbedBuilder()
+                    .setTitle("✔️ ระบบยืนยันตัวตน | Roblox Verification")
+                    .setDescription(
+                        "ยินดีต้อนรับสู่ระบบยืนยันตัวตน กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" +
+                        "**📌 สิ่งที่คุณต้องเตรียม:**\n" +
+                        "• ชื่อผู้ใช้ Roblox (Username)\n" +
+                        "• เข้าร่วมกลุ่ม Roblox ที่กำหนดให้เรียบร้อย\n" +
+                        "• เข้าแมพ ที่ได้ทำการส่งไปให้\n" +
+                        "• หลังเข้าเกมแล้วพิมพ์ ยืนยัน แล้วจะขึ้น หน้าต่าง แล้วกดยืนยันตัวตนได้เลย"
+                    )
+                    .setColor(COLOR_PRIMARY)
+                    .setFooter({ text: "Roblox Verification Management System • Dev by : dewanoi123" });
 
-            await interaction.reply({
-                components: buildSuccessUI("ดำเนินการสำเร็จ", "ติดตั้งข้อความระบบยืนยันตัวตนเรียบร้อยแล้ว"),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
+                if (interaction.guild && interaction.guild.iconURL()) {
+                    embed.setThumbnail(interaction.guild.iconURL());
+                }
 
-        else if (commandName === "ตั้งค่าอีโมจิ") {
-            if (!interaction.guildId) return;
-            const emojiInput = interaction.options.getString("อีโมจิ").trim();
-            const settings = await getGuildSettings(interaction.guildId);
+                // ส่ง Embed พร้อมปุ่มยืนยันตัวตน และ ปุ่มเช็คบทบาท
+                await interaction.channel.send({
+                    embeds: [embed],
+                    components: [createVerifyActionRow(false, vEmoji)]
+                });
 
-            settings.verified_emoji = emojiInput;
-            await saveGuildSettings(interaction.guildId, settings);
+                const confirmEmbed = new EmbedBuilder()
+                    .setTitle("✅ ดำเนินการสำเร็จ")
+                    .setDescription("ติดตั้งข้อความระบบยืนยันตัวตนเรียบร้อยแล้ว")
+                    .setColor(COLOR_SUCCESS);
 
-            const safeE = getSafeEmoji(emojiInput);
-            await interaction.reply({
-                components: buildSuccessUI("อัปเดทอีโมจิสำเร็จ", `เปลี่ยนอีโมจิยืนยันตัวตนเป็น ${safeE} เรียบร้อยแล้ว\n\n*(พิมพ์ \`/ยืนยันตัวตน\` อีกครั้งเพื่อส่งปุ่มด้วยอีโมจิใหม่)*`),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
-
-        else if (commandName === "ล้างข้อมูล" || commandName === "ล้างข้อมูลทั้งหมด") {
-            await dbRun("DELETE FROM users");
-            await interaction.reply({
-                components: buildSuccessUI("ล้างข้อมูลสำเร็จ", "ลบข้อมูลการยืนยันตัวตนทั้งหมดในระบบแล้ว ผู้ใช้ทุกคนจะต้องทำการยืนยันตัวตนใหม่"),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
-
-        else if (commandName === "ใส่โรล") {
-            if (!interaction.guildId) return;
-            const roleType = interaction.options.getString("ประเภท");
-            const role = interaction.options.getRole("โรล");
-            const settings = await getGuildSettings(interaction.guildId);
-
-            if (roleType === "verified" || roleType === "developer") {
-                settings[`${roleType}_role_id`] = role.id;
-            } else {
-                settings.role_ids[roleType] = role.id;
+                await interaction.reply({ embeds: [confirmEmbed], ephemeral: true });
             }
-            await saveGuildSettings(interaction.guildId, settings);
 
-            await interaction.reply({
-                components: buildSuccessUI("ตั้งค่าบทบาทสำเร็จ", `เชื่อมโยงบทบาท <@&${role.id}> ให้กับประเภท **${roleType}** สำเร็จ`),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
+            else if (commandName === "ตั้งค่าอีโมจิ") {
+                if (!interaction.guildId) return;
+                const emojiInput = interaction.options.getString("อีโมจิ").trim();
+                const settings = await getGuildSettings(interaction.guildId);
+
+                settings.verified_emoji = emojiInput;
+                await saveGuildSettings(interaction.guildId, settings);
+
+                const safeE = getSafeEmoji(emojiInput);
+                const embed = new EmbedBuilder()
+                    .setTitle("🎨 อัพเดทอีโมจิสำเร็จ")
+                    .setDescription(`เปลี่ยนอีโมจิยืนยันตัวตนเป็น ${safeE} เรียบร้อยแล้ว`)
+                    .setColor(COLOR_SUCCESS);
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            else if (commandName === "ล้างข้อมูล") {
+                await dbRun("DELETE FROM users");
+                const embed = new EmbedBuilder()
+                    .setTitle("⚠️ ล้างข้อมูลสำเร็จ")
+                    .setDescription("ลบข้อมูลการยืนยันตัวตนทั้งหมดในระบบแล้ว ผู้ใช้ทุกคนจะต้องทำการยืนยันตัวตนใหม่")
+                    .setColor(COLOR_ACCENT);
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            else if (commandName === "ใส่โรล") {
+                if (!interaction.guildId) return;
+                const roleType = interaction.options.getString("ประเภท");
+                const role = interaction.options.getRole("โรล");
+                const settings = await getGuildSettings(interaction.guildId);
+
+                if (roleType === "verified" || roleType === "developer") {
+                    settings[`${roleType}_role_id`] = role.id;
+                } else {
+                    settings.role_ids[roleType] = role.id;
+                }
+                await saveGuildSettings(interaction.guildId, settings);
+
+                const embed = new EmbedBuilder()
+                    .setTitle("🏷️ ตั้งค่าบทบาทสำเร็จ")
+                    .setDescription(`เชื่อมโยงบทบาท <@&${role.id}> ให้กับประเภท **${roleType}** สำเร็จ`)
+                    .setColor(COLOR_SUCCESS);
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            else if (commandName === "ใส่คำนำหน้า") {
+                if (!interaction.guildId) return;
+                const rankCode = interaction.options.getString("ยศ").trim();
+                const title = interaction.options.getString("คำนำหน้า").trim();
+
+                const settings = await getGuildSettings(interaction.guildId);
+                settings.rank_prefixes[rankCode.toLowerCase()] = `${rankCode}, ${title}`;
+                await saveGuildSettings(interaction.guildId, settings);
+
+                const embed = new EmbedBuilder()
+                    .setTitle("🏷️ เพิ่มคำนำหน้าสำเร็จ")
+                    .setDescription(`บันทึกรูปแบบ: **\`${rankCode}, ${title}\`** เรียบร้อยแล้ว`)
+                    .setColor(COLOR_SUCCESS);
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            else if (commandName === "ปรับแต่งทั้งหมด") {
+                const modal = new ModalBuilder()
+                    .setCustomId("customize_all_modal")
+                    .setTitle("⚙️ ปรับแต่งระบบทั้งหมด");
+
+                const groupIdInput = new TextInputBuilder()
+                    .setCustomId("group_id")
+                    .setLabel("Roblox Group ID")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder("ตัวเลขเท่านั้น เช่น 33852603")
+                    .setRequired(false);
+
+                const groupUrlInput = new TextInputBuilder()
+                    .setCustomId("group_url")
+                    .setLabel("ลิงก์กลุ่ม Roblox")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder("https://www.roblox.com/groups/...")
+                    .setRequired(false);
+
+                const mapUrlInput = new TextInputBuilder()
+                    .setCustomId("map_url")
+                    .setLabel("ลิงก์แมพ Roblox")
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder("https://www.roblox.com/games/...")
+                    .setRequired(false);
+
+                const prefixesInput = new TextInputBuilder()
+                    .setCustomId("prefixes")
+                    .setLabel("คำนำหน้ายศ (แยกด้วย ;)")
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder("or-1=PC; of-3=MAJ")
+                    .setRequired(false);
+
+                const roleIdsInput = new TextInputBuilder()
+                    .setCustomId("role_ids")
+                    .setLabel("Role IDs (แยกด้วย ;)")
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setPlaceholder("verified=ID; or=ID; cd=ID; of_low=ID; of_high=ID; hq=ID; guest=ID")
+                    .setRequired(false);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(groupIdInput),
+                    new ActionRowBuilder().addComponents(groupUrlInput),
+                    new ActionRowBuilder().addComponents(mapUrlInput),
+                    new ActionRowBuilder().addComponents(prefixesInput),
+                    new ActionRowBuilder().addComponents(roleIdsInput)
+                );
+
+                await interaction.showModal(modal);
+            }
+
+            else if (commandName === "ดูการตั้งค่า") {
+                if (!interaction.guildId) return;
+                const settings = await getGuildSettings(interaction.guildId);
+                const roleIds = settings.role_ids || {};
+                const vEmoji = settings.verified_emoji || "✅";
+
+                const rolesFmt = 
+                    `• **OR:** \`${roleIds.or || 'None'}\`\n` +
+                    `• **CD (นายร้อย):** \`${roleIds.cd || 'None'}\`\n` +
+                    `• **OF Low:** \`${roleIds.of_low || 'None'}\`\n` +
+                    `• **OF High:** \`${roleIds.of_high || 'None'}\`\n` +
+                    `• **HQ (กองบัญชาการ):** \`${roleIds.hq || 'None'}\`\n` +
+                    `• **Guest:** \`${roleIds.guest || 'None'}\``;
+
+                let prefixesStr = Object.entries(settings.rank_prefixes || {})
+                    .map(([k, v]) => `\`${k}\` ➔ ${v}`)
+                    .join("\n");
+
+                const embed = new EmbedBuilder()
+                    .setTitle("⚙️ การตั้งค่าระบบปัจจุบัน (Server Settings)")
+                    .setColor(COLOR_INFO)
+                    .addFields(
+                        { name: "📌 Group ID", value: `\`\`\`${settings.roblox_group_id}\`\`\``, inline: true },
+                        { name: "✅ Verified Role ID", value: `\`\`\`${settings.verified_role_id}\`\`\``, inline: true },
+                        { name: "🎨 Verification Emoji", value: `${vEmoji}`, inline: true },
+                        { name: "🎭 Role Configs", value: rolesFmt, inline: false },
+                        { name: "🏷️ Rank Prefixes", value: prefixesStr.substring(0, 1024) || "*ไม่มีข้อมูล*", inline: false }
+                    )
+                    .setFooter({ text: "Configuration Panel • Dev by : dewanoi123" });
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            }
         }
 
-        else if (commandName === "ใส่คำนำหน้า") {
-            if (!interaction.guildId) return;
-            const rankCode = interaction.options.getString("ยศ").trim();
-            const title = interaction.options.getString("คำนำหน้า").trim();
+        else if (interaction.isButton()) {
+            const customId = interaction.customId;
 
-            const settings = await getGuildSettings(interaction.guildId);
-            settings.rank_prefixes[rankCode.toLowerCase()] = `${rankCode}, ${title}`;
-            await saveGuildSettings(interaction.guildId, settings);
+            // 1. ปุ่ม ยืนยันตัวตนที่นี่
+            if (customId === "persistent_verify") {
+                const user = await getUser(interaction.user.id);
+                if (user && user.verified) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("✅ บัญชีนี้ได้รับการยืนยันตัวตนแล้ว")
+                        .setDescription("คุณผูกบัญชีเรียบร้อยแล้ว กรุณากดปุ่ม **`เช็คบทบาท`** เพื่อดูข้อมูล ยศ และคำนำหน้าชื่อของคุณ")
+                        .setColor(COLOR_INFO);
+                    await interaction.reply({ embeds: [embed], ephemeral: true });
+                } else {
+                    const modal = new ModalBuilder()
+                        .setCustomId("verify_modal")
+                        .setTitle("⚡ ยืนยันตัวตน ROBLOX");
 
-            await interaction.reply({
-                components: buildSuccessUI("เพิ่มคำนำหน้าสำเร็จ", `บันทึกรูปแบบ: **\`${rankCode}, ${title}\`** เรียบร้อยแล้ว`),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
+                    const usernameInput = new TextInputBuilder()
+                        .setCustomId("roblox_username")
+                        .setLabel("ROBLOX USERNAME")
+                        .setPlaceholder("กรอกชื่อผู้ใช้ของคุณ (เช่น RobloxUser123)")
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(3)
+                        .setMaxLength(20)
+                        .setRequired(true);
 
-        else if (commandName === "ปรับแต่งทั้งหมด") {
-            const modal = new ModalBuilder()
-                .setCustomId("customize_all_modal")
-                .setTitle("⚙️ ปรับแต่งระบบทั้งหมด");
+                    modal.addComponents(new ActionRowBuilder().addComponents(usernameInput));
+                    await interaction.showModal(modal);
+                }
+            }
 
-            const groupIdInput = new TextInputBuilder()
-                .setCustomId("group_id")
-                .setLabel("Roblox Group ID")
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder("ตัวเลขเท่านั้น เช่น 33852603")
-                .setRequired(false);
+            // 2. ปุ่ม เช็คบทบาท (แสดงข้อมูล ชื่อในเกม, ยศ, คำนำหน้าชื่อ + ปุ่มอัปเดทยศ & เปลี่ยน Account)
+            else if (customId === "check_role") {
+                await interaction.deferReply({ ephemeral: true });
+                const user = await getUser(interaction.user.id);
 
-            const groupUrlInput = new TextInputBuilder()
-                .setCustomId("group_url")
-                .setLabel("ลิงก์กลุ่ม Roblox")
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder("https://www.roblox.com/groups/...")
-                .setRequired(false);
+                if (!user || !user.verified) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("❌ ยังไม่ได้ยืนยันตัวตน")
+                        .setDescription("คุณยังไม่ได้ยืนยันตัวตนในระบบ กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ก่อน")
+                        .setColor(COLOR_ERROR);
+                    await interaction.editReply({ embeds: [embed] });
+                    return;
+                }
 
-            const mapUrlInput = new TextInputBuilder()
-                .setCustomId("map_url")
-                .setLabel("ลิงก์แมพ Roblox")
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder("https://www.roblox.com/games/...")
-                .setRequired(false);
+                // ดึงข้อมูลยศและคำนำหน้าล่าสุด
+                const result = await updateMemberStatus(
+                    interaction.user.id,
+                    user.roblox_id,
+                    user.roblox_username,
+                    interaction.guildId
+                );
 
-            const prefixesInput = new TextInputBuilder()
-                .setCustomId("prefixes")
-                .setLabel("คำนำหน้ายศ (แยกด้วย ;)")
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder("or-1=PC; of-3=MAJ")
-                .setRequired(false);
+                const embed = new EmbedBuilder()
+                    .setTitle("🛡️ ข้อมูลบทบาทและบัญชีผู้ใช้")
+                    .setColor(COLOR_PRIMARY)
+                    .addFields(
+                        { name: "👤 ชื่อในเกม (Username)", value: `\`\`\`${user.roblox_username}\`\`\``, inline: true },
+                        { name: "🎖️ ยศ (Rank)", value: `\`\`\`${result.rankName || 'Guest'}\`\`\``, inline: true },
+                        { name: "🏷️ คำนำหน้าชื่อ (Prefix)", value: `\`\`\`${result.prefix || 'ไม่มี'}\`\`\``, inline: true },
+                        { name: "🆔 Roblox ID", value: `\`\`\`${user.roblox_id}\`\`\``, inline: false }
+                    )
+                    .setThumbnail(interaction.user.displayAvatarURL())
+                    .setFooter({ text: "Role Information System • Dev by : dewanoi123" })
+                    .setTimestamp();
 
-            const roleIdsInput = new TextInputBuilder()
-                .setCustomId("role_ids")
-                .setLabel("Role IDs (แยกด้วย ;)")
-                .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder("verified=ID; or=ID; cd=ID; of_low=ID; of_high=ID; hq=ID; guest=ID")
-                .setRequired(false);
+                // สร้างปุ่ม อัปเดทยศ และ เปลี่ยน Account ให้อยู่คู่กัน
+                const btnUpdate = new ButtonBuilder()
+                    .setCustomId("update_rank")
+                    .setLabel("อัปเดทยศ")
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji("🔄");
 
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(groupIdInput),
-                new ActionRowBuilder().addComponents(groupUrlInput),
-                new ActionRowBuilder().addComponents(mapUrlInput),
-                new ActionRowBuilder().addComponents(prefixesInput),
-                new ActionRowBuilder().addComponents(roleIdsInput)
-            );
+                const btnChange = new ButtonBuilder()
+                    .setCustomId("change_acc")
+                    .setLabel("เปลี่ยน Account")
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji("🔁");
 
-            await interaction.showModal(modal);
-        }
+                const row = new ActionRowBuilder().addComponents(btnUpdate, btnChange);
 
-        else if (commandName === "ดูการตั้งค่า") {
-            if (!interaction.guildId) return;
-            const settings = await getGuildSettings(interaction.guildId);
+                await interaction.editReply({
+                    embeds: [embed],
+                    components: [row]
+                });
+            }
 
-            await interaction.reply({
-                components: buildSettingsUI(settings),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
-    }
+            // 3. ปุ่ม อัปเดทยศ (กดจากในหน้าเช็คบทบาท)
+            else if (customId === "update_rank") {
+                await interaction.deferReply({ ephemeral: true });
+                const user = await getUser(interaction.user.id);
 
-    else if (interaction.isButton()) {
-        const customId = interaction.customId;
+                if (!user || !user.roblox_id) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("❌ ไม่พบข้อมูล")
+                        .setDescription("ไม่พบข้อมูลการบันทึกยืนยันตัวตนของคุณในระบบ")
+                        .setColor(COLOR_ERROR);
+                    await interaction.editReply({ embeds: [embed] });
+                    return;
+                }
 
-        if (customId === "persistent_verify") {
-            const user = await getUser(interaction.user.id);
-            if (user && user.verified) {
+                const result = await updateMemberStatus(
+                    interaction.user.id,
+                    user.roblox_id,
+                    user.roblox_username,
+                    interaction.guildId
+                );
+
+                if (result.rankVal === null) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("❌ เกิดข้อผิดพลาด")
+                        .setDescription(`\`\`\`${result.errMsg}\`\`\``)
+                        .setColor(COLOR_ERROR);
+                    await interaction.editReply({ embeds: [embed] });
+                    return;
+                }
+
                 const settings = await getGuildSettings(interaction.guildId);
                 const safeVEmoji = getSafeEmoji(settings.verified_emoji || "✅");
 
-                await interaction.reply({
-                    components: buildAlreadyVerifiedUI(user.roblox_username, user.roblox_id, safeVEmoji),
-                    flags: MessageFlags.IsComponentsV2,
-                    ephemeral: true
-                });
-            } else {
+                const embed = new EmbedBuilder()
+                    .setTitle(`${safeVEmoji} อัปเดทยศสำเร็จ!`)
+                    .setDescription(`ปรับปรุงข้อมูลของ **\`${user.roblox_username}\`** เรียบร้อยแล้ว`)
+                    .setColor(COLOR_SUCCESS)
+                    .addFields(
+                        { name: "🎖️ ยศปัจจุบัน", value: `\`\`\`${result.rankName}\`\`\``, inline: true },
+                        { name: "🏷️ คำนำหน้าชื่อ", value: `\`\`\`${result.prefix || 'ไม่มี'}\`\`\``, inline: true }
+                    )
+                    .setTimestamp();
+
+                await interaction.editReply({ embeds: [embed] });
+            }
+
+            // 4. ปุ่ม เปลี่ยน Account
+            else if (customId === "change_acc") {
                 const modal = new ModalBuilder()
                     .setCustomId("verify_modal")
-                    .setTitle("⚡ ยืนยันตัวตน ROBLOX");
+                    .setTitle("⚡ ยืนยันตัวตน ROBLOX (เปลี่ยนบัญชี)");
 
                 const usernameInput = new TextInputBuilder()
                     .setCustomId("roblox_username")
-                    .setLabel("ROBLOX USERNAME")
-                    .setPlaceholder("กรอกชื่อผู้ใช้ของคุณ (เช่น RobloxUser123)")
+                    .setLabel("ROBLOX USERNAME ใหม่")
+                    .setPlaceholder("กรอกชื่อผู้ใช้ Roblox ใหม่ของคุณ")
                     .setStyle(TextInputStyle.Short)
                     .setMinLength(3)
                     .setMaxLength(20)
@@ -839,160 +799,119 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        else if (customId === "update_rank") {
-            await interaction.deferReply({ ephemeral: true });
-            const user = await getUser(interaction.user.id);
+        else if (interaction.type === InteractionType.ModalSubmit) {
+            if (interaction.customId === "verify_modal") {
+                const inputName = interaction.fields.getTextInputValue("roblox_username").trim();
+                const { robloxId, name: correctName } = await getRobloxInfoByName(inputName);
 
-            if (!user || !user.roblox_id) {
-                await interaction.editReply({
-                    components: buildErrorUI("ไม่พบข้อมูล", "ไม่พบข้อมูลการบันทึกยืนยันตัวตนของคุณในระบบ"),
-                    flags: MessageFlags.IsComponentsV2
-                });
-                return;
+                if (!robloxId) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("❌ ไม่พบข้อมูลบัญชี")
+                        .setDescription(`ไม่พบบัญชี Roblox ชื่อ **\`${inputName}\`** โปรดตรวจสอบตัวอักษรแล้วลองใหม่อีกครั้ง`)
+                        .setColor(COLOR_ERROR);
+                    await interaction.reply({ embeds: [embed], ephemeral: true });
+                    return;
+                }
+
+                const settings = await getGuildSettings(interaction.guildId);
+                const isDev = DEVELOPER_IDS.includes(parseInt(robloxId, 10));
+                const groupInfo = await checkGroupMembership(robloxId, settings.roblox_group_id);
+
+                if (!groupInfo.isInGroup && !isDev) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("🚫 จำเป็นต้องเข้าร่วมกลุ่ม")
+                        .setDescription(`คุณจำเป็นต้องเป็นสมาชิกของกลุ่ม Roblox ก่อนจึงจะทำการยืนยันตัวตนได้\n\n🔗 **[คลิกที่นี่เพื่อเข้ากลุ่ม Roblox](${settings.roblox_group_url})**`)
+                        .setColor(COLOR_ERROR);
+                    await interaction.reply({ embeds: [embed], ephemeral: true });
+                    try {
+                        await interaction.user.send(`⚠️ **แจ้งเตือน:** กรุณาเข้ากลุ่ม Roblox ก่อนทำการยืนยันตัวตน: ${settings.roblox_group_url}`);
+                    } catch (e) {}
+                    return;
+                }
+
+                await updatePending(interaction.user.id, robloxId, correctName);
+
+                const embed = new EmbedBuilder()
+                    .setTitle("📥 ขั้นตอนถัดไป: ยืนยันตัวตนในเกม")
+                    .setDescription("ระบบได้รับข้อมูลของคุณเรียบร้อยแล้ว โปรดเข้าเกมเพื่อทำรายการยืนยันให้เสร็จสมบูรณ์")
+                    .setColor(COLOR_INFO)
+                    .addFields(
+                        { name: "👤 Roblox Username", value: `\`\`\`${correctName}\`\`\``, inline: true },
+                        { name: "🆔 Roblox ID", value: `\`\`\`${robloxId}\`\`\``, inline: true },
+                        { name: "🎮 เข้ายืนยันตัวตน", value: `➡️ **[คลิกที่นี่เพื่อเข้าสู่แมพยืนยันตัวตน](${settings.roblox_map_url})**`, inline: false }
+                    )
+                    .setFooter({ text: "ระบบกำลังรอการยืนยันจากในเกม...", iconURL: interaction.user.displayAvatarURL() });
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
             }
 
-            const result = await updateMemberStatus(
-                interaction.user.id,
-                user.roblox_id,
-                user.roblox_username,
-                interaction.guildId
-            );
+            else if (interaction.customId === "customize_all_modal") {
+                const guildId = interaction.guildId;
+                if (!guildId) return;
 
-            if (result.rankVal === null) {
-                await interaction.editReply({
-                    components: buildErrorUI("เกิดข้อผิดพลาด", result.errMsg),
-                    flags: MessageFlags.IsComponentsV2
-                });
-                return;
-            }
+                const settings = await getGuildSettings(guildId);
 
-            const settings = await getGuildSettings(interaction.guildId);
-            const safeVEmoji = getSafeEmoji(settings.verified_emoji || "✅");
+                const gidVal = interaction.fields.getTextInputValue("group_id").trim();
+                const gUrlVal = interaction.fields.getTextInputValue("group_url").trim();
+                const mUrlVal = interaction.fields.getTextInputValue("map_url").trim();
+                const prefixesVal = interaction.fields.getTextInputValue("prefixes").trim();
+                const roleIdsVal = interaction.fields.getTextInputValue("role_ids").trim();
 
-            await interaction.editReply({
-                components: buildSuccessUI(`${safeVEmoji} อัปเดทยศสำเร็จ!`, `ปรับปรุงข้อมูลของ **\`${user.roblox_username}\`** เรียบร้อยแล้ว\nยศปัจจุบัน: **\`${result.rankName}\`**`),
-                flags: MessageFlags.IsComponentsV2
-            });
-        }
+                if (gidVal) {
+                    const parsedGid = parseId(gidVal);
+                    if (parsedGid) settings.roblox_group_id = parseInt(parsedGid, 10);
+                }
+                if (gUrlVal) settings.roblox_group_url = gUrlVal;
+                if (mUrlVal) settings.roblox_map_url = mUrlVal;
 
-        else if (customId === "change_acc") {
-            const modal = new ModalBuilder()
-                .setCustomId("verify_modal")
-                .setTitle("⚡ ยืนยันตัวตน ROBLOX");
-
-            const usernameInput = new TextInputBuilder()
-                .setCustomId("roblox_username")
-                .setLabel("ROBLOX USERNAME")
-                .setPlaceholder("กรอกชื่อผู้ใช้ของคุณ (เช่น RobloxUser123)")
-                .setStyle(TextInputStyle.Short)
-                .setMinLength(3)
-                .setMaxLength(20)
-                .setRequired(true);
-
-            modal.addComponents(new ActionRowBuilder().addComponents(usernameInput));
-            await interaction.showModal(modal);
-        }
-    }
-
-    else if (interaction.type === InteractionType.ModalSubmit) {
-        if (interaction.customId === "verify_modal") {
-            const inputName = interaction.fields.getTextInputValue("roblox_username").trim();
-            const { robloxId, name: correctName } = await getRobloxInfoByName(inputName);
-
-            if (!robloxId) {
-                await interaction.reply({
-                    components: buildErrorUI("ไม่พบข้อมูลบัญชี", `ไม่พบบัญชี Roblox ชื่อ **\`${inputName}\`** โปรดตรวจสอบตัวอักษรแล้วลองใหม่อีกครั้ง`),
-                    flags: MessageFlags.IsComponentsV2,
-                    ephemeral: true
-                });
-                return;
-            }
-
-            const settings = await getGuildSettings(interaction.guildId);
-            const isDev = DEVELOPER_IDS.includes(parseInt(robloxId, 10));
-            const groupInfo = await checkGroupMembership(robloxId, settings.roblox_group_id);
-
-            if (!groupInfo.isInGroup && !isDev) {
-                await interaction.reply({
-                    components: buildErrorUI("จำเป็นต้องเข้าร่วมกลุ่ม", `คุณจำเป็นต้องเป็นสมาชิกของกลุ่ม Roblox ก่อนจึงจะทำการยืนยันตัวตนได้\n\n🔗 **[คลิกที่นี่เพื่อเข้ากลุ่ม Roblox](${settings.roblox_group_url})**`),
-                    flags: MessageFlags.IsComponentsV2,
-                    ephemeral: true
-                });
-                try {
-                    await interaction.user.send(`⚠️ **แจ้งเตือน:** กรุณาเข้ากลุ่ม Roblox ก่อนทำการยืนยันตัวตน: ${settings.roblox_group_url}`);
-                } catch (e) {}
-                return;
-            }
-
-            await updatePending(interaction.user.id, robloxId, correctName);
-
-            await interaction.reply({
-                components: buildPendingGameUI(correctName, robloxId, settings.roblox_map_url),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
-        }
-
-        else if (interaction.customId === "customize_all_modal") {
-            const guildId = interaction.guildId;
-            if (!guildId) return;
-
-            const settings = await getGuildSettings(guildId);
-
-            const gidVal = interaction.fields.getTextInputValue("group_id").trim();
-            const gUrlVal = interaction.fields.getTextInputValue("group_url").trim();
-            const mUrlVal = interaction.fields.getTextInputValue("map_url").trim();
-            const prefixesVal = interaction.fields.getTextInputValue("prefixes").trim();
-            const roleIdsVal = interaction.fields.getTextInputValue("role_ids").trim();
-
-            if (gidVal) {
-                const parsedGid = parseId(gidVal);
-                if (parsedGid) settings.roblox_group_id = parseInt(parsedGid, 10);
-            }
-            if (gUrlVal) settings.roblox_group_url = gUrlVal;
-            if (mUrlVal) settings.roblox_map_url = mUrlVal;
-
-            if (prefixesVal) {
-                prefixesVal.split(";").forEach(item => {
-                    if (item.includes("=")) {
-                        let [k, v] = item.split("=", 2);
-                        k = k.trim().toLowerCase();
-                        v = v.trim();
-                        if (k && v) {
-                            if (!v.includes(",") && k.includes("-")) {
-                                settings.rank_prefixes[k] = `${k.toUpperCase()}, ${v}`;
-                            } else {
-                                settings.rank_prefixes[k] = v;
+                if (prefixesVal) {
+                    prefixesVal.split(";").forEach(item => {
+                        if (item.includes("=")) {
+                            let [k, v] = item.split("=", 2);
+                            k = k.trim().toLowerCase();
+                            v = v.trim();
+                            if (k && v) {
+                                if (!v.includes(",") && k.includes("-")) {
+                                    settings.rank_prefixes[k] = `${k.toUpperCase()}, ${v}`;
+                                } else {
+                                    settings.rank_prefixes[k] = v;
+                                }
                             }
                         }
-                    }
-                });
-            }
+                    });
+                }
 
-            if (roleIdsVal) {
-                roleIdsVal.split(";").forEach(item => {
-                    if (item.includes("=")) {
-                        let [rtype, ridRaw] = item.split("=", 2);
-                        rtype = rtype.trim().toLowerCase();
-                        const rid = parseId(ridRaw);
-                        if (rid) {
-                            if (rtype === "verified" || rtype === "developer") {
-                                settings[`${rtype}_role_id`] = rid;
-                            } else if (["or", "cd", "of_low", "of_high", "hq", "guest"].includes(rtype)) {
-                                settings.role_ids[rtype] = rid;
+                if (roleIdsVal) {
+                    roleIdsVal.split(";").forEach(item => {
+                        if (item.includes("=")) {
+                            let [rtype, ridRaw] = item.split("=", 2);
+                            rtype = rtype.trim().toLowerCase();
+                            const rid = parseId(ridRaw);
+                            if (rid) {
+                                if (rtype === "verified" || rtype === "developer") {
+                                    settings[`${rtype}_role_id`] = rid;
+                                } else if (["or", "cd", "of_low", "of_high", "hq", "guest"].includes(rtype)) {
+                                    settings.role_ids[rtype] = rid;
+                                }
                             }
                         }
-                    }
-                });
+                    });
+                }
+
+                await saveGuildSettings(guildId, settings);
+
+                const embed = new EmbedBuilder()
+                    .setTitle("✅ บันทึกการตั้งค่าเรียบร้อย")
+                    .setDescription("การตั้งค่าระบบถูกอัปเดตสำหรับเซิร์ฟเวอร์นี้แล้ว")
+                    .setColor(COLOR_SUCCESS);
+
+                await interaction.reply({ embeds: [embed], ephemeral: true });
             }
-
-            await saveGuildSettings(guildId, settings);
-
-            await interaction.reply({
-                components: buildSuccessUI("บันทึกการตั้งค่าเรียบร้อย", "การตั้งค่าระบบถูกอัปเดตสำหรับเซิร์ฟเวอร์นี้แล้ว"),
-                flags: MessageFlags.IsComponentsV2,
-                ephemeral: true
-            });
+        }
+    } catch (err) {
+        console.error("Interaction Handle Error:", err);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: "❌ เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่อีกครั้ง", ephemeral: true }).catch(() => {});
         }
     }
 });
