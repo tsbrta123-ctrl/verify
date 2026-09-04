@@ -24,12 +24,12 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN || "";
 const PORT = parseInt(process.env.PORT || "8888", 10);
 const DB_PATH = process.env.DB_PATH || "database.db";
 
-const GIF_URL = "https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025&";
+const GIF_URL = "[https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025](https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025)&";
 
 const DEFAULT_SETTINGS = {
     roblox_group_id: 33852603,
-    roblox_group_url: "https://www.roblox.com/groups/33852603",
-    roblox_map_url: "https://www.roblox.com/games/17709721251",
+    roblox_group_url: "[https://www.roblox.com/groups/33852603](https://www.roblox.com/groups/33852603)",
+    roblox_map_url: "[https://www.roblox.com/games/17709721251](https://www.roblox.com/games/17709721251)",
     verified_role_id: "1540716342120939550",
     developer_role_id: "1420812428740133016",
     verified_emoji: "✅",
@@ -58,7 +58,7 @@ const DEFAULT_SETTINGS = {
 const DEVELOPER_IDS = [2769442731];
 
 // ==========================================
-// DATABASE UTILITIES (sqlite3)
+// DATABASE UTILITIES
 // ==========================================
 const db = new sqlite3.Database(DB_PATH);
 
@@ -165,7 +165,6 @@ function getSafeEmoji(emojiStr) {
     return emojiStr;
 }
 
-// Helper สร้างรูปแบบ Emoji Object สำหรับ Components V2
 function formatEmojiForComponent(emojiStr) {
     const safe = getSafeEmoji(emojiStr);
     if (typeof safe === 'object' && safe.name) {
@@ -180,7 +179,7 @@ function formatEmojiForComponent(emojiStr) {
 async function getRobloxInfoByName(username) {
     try {
         const response = await axios.post(
-            "https://users.roblox.com/v1/usernames/users",
+            "[https://users.roblox.com/v1/usernames/users](https://users.roblox.com/v1/usernames/users)",
             { usernames: [username], excludeBannedUsers: true },
             { timeout: 15000 }
         );
@@ -199,7 +198,7 @@ async function getRobloxInfoByName(username) {
 async function checkGroupMembership(robloxId, groupId) {
     try {
         const response = await axios.get(
-            `https://groups.roblox.com/v1/users/${robloxId}/groups/roles`,
+            `[https://groups.roblox.com/v1/users/$](https://groups.roblox.com/v1/users/$){robloxId}/groups/roles`,
             { timeout: 15000 }
         );
         if (response.data && response.data.data) {
@@ -334,47 +333,76 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
 }
 
 // ==========================================
-// COMPONENTS V2 UI BUILDERS (ตกแต่งสวยงามทุก UI)
+// ULTRA ADVANCED COMPONENTS V2 BUILDERS
 // ==========================================
 
 // 1. หน้า UI หลัก (ยืนยันตัวตน)
-function buildMainVerifyUI(vEmoji = "✅") {
+function buildMainVerifyUI(guild, vEmoji = "✅") {
+    const guildIcon = guild && guild.iconURL() ? guild.iconURL() : null;
+
+    const componentsList = [
+        // Header Section พร้อม Thumbnail มุมขวา
+        {
+            type: 9, // Section
+            components: [
+                {
+                    type: 10,
+                    content: `# 🛡️ ROBLOX VERIFICATION SYSTEM\n### ระบบยืนยันตัวตนและจัดการยศอัตโนมัติ`
+                }
+            ],
+            accessory: guildIcon ? {
+                type: 11, // Thumbnail Image
+                media: { url: guildIcon }
+            } : undefined
+        },
+        {
+            type: 14, // Separator
+            divider: true,
+            spacing: 1
+        },
+        // Content Body Section
+        {
+            type: 10,
+            content: 
+                "ยินดีต้อนรับสู่ระบบยืนยันตัวตน! กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเชื่อมโยงบัญชี Discord ของคุณเข้ากับ Roblox\n\n" +
+                "**📌 สิ่งที่คุณต้องเตรียมพร้อม:**\n" +
+                "└ 👤 **Roblox Username** (ชื่อผู้ใช้ของคุณ)\n" +
+                "└ 🛡️ **Roblox Group** (เข้าร่วมกลุ่มให้เรียบร้อย)\n" +
+                "└ 🎮 **Verification Game** (เข้าเล่นแมพที่ระบบส่งให้ตามลิงก์)\n" +
+                "└ 💬 พิมพ์คำว่า `ยืนยัน` ภายในเกมเพื่อเสร็จสิ้นขั้นตอน"
+        },
+        // Media Banner
+        {
+            type: 12, // Media Gallery
+            items: [{ media: { url: GIF_URL } }]
+        },
+        {
+            type: 14,
+            divider: true,
+            spacing: 1
+        },
+        // Footer Section พร้อม ปุ่มกด
+        {
+            type: 9, // Section
+            components: [
+                {
+                    type: 10,
+                    content: "*Roblox Verification Management System • Dev by: dewanoi123*"
+                }
+            ],
+            accessory: {
+                type: 2, // Button
+                custom_id: "persistent_verify",
+                label: "ยืนยันตัวตนที่นี่",
+                style: 1, // Primary Blue
+                emoji: formatEmojiForComponent(vEmoji)
+            }
+        }
+    ];
+
     return [{
         type: 17, // Container
-        components: [
-            {
-                type: 10,
-                content: 
-                    "# ⚡ Roblox Verification System\n" +
-                    "### ยินดีต้อนรับสู่ระบบยืนยันตัวตนอัตโนมัติ\n" +
-                    "กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเชื่อมโยงบัญชี Discord ของคุณเข้ากับ Roblox\n\n" +
-                    "**📌 ข้อปฏิบัติและสิ่งที่ต้องเตรียม:**\n" +
-                    "• ชื่อผู้ใช้ Roblox (**Username**)\n" +
-                    "• เข้าร่วมกลุ่ม Roblox ที่กำหนดไว้เรียบร้อยแล้ว\n" +
-                    "• เข้าสู่เกมในลิงก์ที่ระบบจัดส่งให้เพื่อกดยืนยันในเกม"
-            },
-            {
-                type: 12, // Media Banner
-                items: [{ media: { url: GIF_URL } }]
-            },
-            {
-                type: 14, // Separator
-                divider: true,
-                spacing: 1
-            },
-            {
-                type: 1, // ActionRow
-                components: [
-                    {
-                        type: 2,
-                        custom_id: "persistent_verify",
-                        label: "ยืนยันตัวตนที่นี่",
-                        style: 1, // Primary (Blue)
-                        emoji: formatEmojiForComponent(vEmoji)
-                    }
-                ]
-            }
-        ]
+        components: componentsList.filter(c => c.accessory !== undefined || c.type !== 9)
     }];
 }
 
@@ -386,11 +414,8 @@ function buildAlreadyVerifiedUI(username, robloxId, safeVEmoji) {
             {
                 type: 10,
                 content: 
-                    "# ✅ บัญชีนี้ได้รับการยืนยันตัวตนแล้ว\n" +
-                    "ข้อมูลบัญชีของคุณผูกติดกับระบบเรียบร้อยแล้ว สามารถกดปุ่มด้านล่างเพื่ออัปเดทยศ หรือเปลี่ยนบัญชีผู้ใช้\n\n" +
-                    `> **👤 Roblox Username:** \`${username}\`\n` +
-                    `> **🆔 Roblox ID:** \`${robloxId}\`\n` +
-                    `> **⚡ สถานะ:** Verified`
+                    "# ✨ บัญชีนี้ได้รับการยืนยันตัวตนแล้ว\n" +
+                    "ข้อมูลบัญชีของคุณถูกผูกกับระบบอย่างสมบูรณ์แล้ว สามารถกดปุ่มด้านล่างเพื่ออัปเดทยศหรือเปลี่ยนบัญชีผู้ใช้"
             },
             {
                 type: 14,
@@ -398,20 +423,34 @@ function buildAlreadyVerifiedUI(username, robloxId, safeVEmoji) {
                 spacing: 1
             },
             {
-                type: 1,
+                type: 10,
+                content: 
+                    "```yaml\n" +
+                    `USER : ${username}\n` +
+                    `ID   : ${robloxId}\n` +
+                    `STATUS: VERIFIED\n` +
+                    "```"
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 1, // ActionRow
                 components: [
                     {
                         type: 2,
                         custom_id: "update_rank",
                         label: "อัปเดทยศ",
-                        style: 3, // Success (Green)
+                        style: 3, // Success Green
                         emoji: { name: "🔄" }
                     },
                     {
                         type: 2,
                         custom_id: "change_acc",
                         label: "เปลี่ยน Account",
-                        style: 2, // Secondary (Gray)
+                        style: 2, // Secondary Gray
                         emoji: { name: "🔁" }
                     }
                 ]
@@ -420,7 +459,7 @@ function buildAlreadyVerifiedUI(username, robloxId, safeVEmoji) {
     }];
 }
 
-// 3. หน้า UI ขั้นตอนถัดไป (แนะนำไปเข้าเกม)
+// 3. หน้า UI ขั้นตอนถัดไป (เข้าเกม)
 function buildPendingGameUI(correctName, robloxId, mapUrl) {
     return [{
         type: 17,
@@ -429,10 +468,7 @@ function buildPendingGameUI(correctName, robloxId, mapUrl) {
                 type: 10,
                 content: 
                     "# 📥 ขั้นตอนถัดไป: ยืนยันตัวตนในเกม\n" +
-                    "ระบบบันทึกข้อมูลตั้งต้นเรียบร้อยแล้ว โปรดเข้าเกมเพื่อยืนยันตัวตนขั้นตอนสุดท้าย\n\n" +
-                    `• **Roblox Username:** \`${correctName}\`\n` +
-                    `• **Roblox ID:** \`${robloxId}\`\n\n` +
-                    `🎮 **[คลิกที่นี่เพื่อเข้าสู่แมพยืนยันตัวตน](${mapUrl})**`
+                    "ระบบบันทึกข้อมูลของคุณเรียบร้อยแล้ว โปรดเข้าสู่เกมตามลิงก์ด้านล่างเพื่อกดยืนยันขั้นตอนสุดท้าย"
             },
             {
                 type: 14,
@@ -441,33 +477,45 @@ function buildPendingGameUI(correctName, robloxId, mapUrl) {
             },
             {
                 type: 10,
-                content: "*ระบบกำลังรอการเชื่อมต่อและกดสั่งการยืนยันจากภายในเกม...*"
+                content: 
+                    `> 👤 **Roblox Username:** \`${correctName}\`\n` +
+                    `> 🆔 **Roblox ID:** \`${robloxId}\`\n\n` +
+                    `➡️ **[คลิกที่นี่เพื่อเข้าสู่แมพยืนยันตัวตน](${mapUrl})**`
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 10,
+                content: "⏳ *ระบบกำลังรอสัญญาณยืนยันการทำรายการจากภายในเกม...*"
             }
         ]
     }];
 }
 
-// 4. UI การแจ้งเตือนข้อผิดพลาด / ความล้มเหลว
+// 4. UI แจ้งเตือนข้อผิดพลาด
 function buildErrorUI(title, description) {
     return [{
         type: 17,
         components: [
             {
                 type: 10,
-                content: `## ❌ ${title}\n${description}`
+                content: `# ❌ ${title}\n${description}`
             }
         ]
     }];
 }
 
-// 5. UI แจ้งเตือนความสำเร็จทั่วไป
+// 5. UI แจ้งเตือนความสำเร็จ
 function buildSuccessUI(title, description) {
     return [{
         type: 17,
         components: [
             {
                 type: 10,
-                content: `## ✅ ${title}\n${description}`
+                content: `# 🎉 ${title}\n${description}`
             }
         ]
     }];
@@ -478,28 +526,34 @@ function buildSettingsUI(settings) {
     const roleIds = settings.role_ids || {};
     const vEmoji = settings.verified_emoji || "✅";
 
-    const rolesFmt = 
-        `• **OR:** \`${roleIds.or || 'None'}\` | **CD:** \`${roleIds.cd || 'None'}\`\n` +
-        `• **OF Low:** \`${roleIds.of_low || 'None'}\` | **OF High:** \`${roleIds.of_high || 'None'}\`\n` +
-        `• **HQ:** \`${roleIds.hq || 'None'}\` | **Guest:** \`${roleIds.guest || 'None'}\``;
-
-    let prefixesStr = Object.entries(settings.rank_prefixes || {})
-        .map(([k, v]) => `\`${k}\` ➔ ${v}`)
-        .join("\n");
-
     return [{
         type: 17,
         components: [
             {
                 type: 10,
+                content: "# ⚙️ SERVER CONFIGURATIONS"
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 10,
                 content: 
-                    "# ⚙️ การตั้งค่าระบบปัจจุบัน (Server Settings)\n\n" +
-                    `### 📌 ข้อมูลทั่วไป\n` +
-                    `• **Group ID:** \`${settings.roblox_group_id}\`\n` +
-                    `• **Verified Role ID:** \`${settings.verified_role_id}\`\n` +
-                    `• **Verification Emoji:** ${vEmoji}\n\n` +
-                    `### 🎭 Role Configurations\n${rolesFmt}\n\n` +
-                    `### 🏷️ Rank Prefixes\n${prefixesStr.substring(0, 800) || "*ไม่มีข้อมูล*"}`
+                    "### 📌 General Settings\n" +
+                    `└ **Roblox Group ID:** \`${settings.roblox_group_id}\`\n` +
+                    `└ **Verified Role ID:** \`${settings.verified_role_id}\`\n` +
+                    `└ **Verification Emoji:** ${vEmoji}\n\n` +
+                    "### 🎭 Role Binding IDs\n" +
+                    "```ini\n" +
+                    `[OR]     = ${roleIds.or || 'Not Set'}\n` +
+                    `[CD]     = ${roleIds.cd || 'Not Set'}\n` +
+                    `[OF LOW] = ${roleIds.of_low || 'Not Set'}\n` +
+                    `[OF HIGH]= ${roleIds.of_high || 'Not Set'}\n` +
+                    `[HQ]     = ${roleIds.hq || 'Not Set'}\n` +
+                    `[GUEST]  = ${roleIds.guest || 'Not Set'}\n` +
+                    "```"
             }
         ]
     }];
@@ -617,12 +671,12 @@ client.on('interactionCreate', async (interaction) => {
             const vEmoji = settings.verified_emoji || "✅";
 
             await interaction.channel.send({
-                components: buildMainVerifyUI(vEmoji),
+                components: buildMainVerifyUI(interaction.guild, vEmoji),
                 flags: MessageFlags.IsComponentsV2
             });
 
             await interaction.reply({
-                components: buildSuccessUI("ดำเนินการสำเร็จ", "ติดตั้งข้อความระบบยืนยันตัวตน (Components V2 UI) ลงในช่องนี้เรียบร้อยแล้ว"),
+                components: buildSuccessUI("ดำเนินการสำเร็จ", "ติดตั้งข้อความระบบยืนยันตัวตนเรียบร้อยแล้ว"),
                 flags: MessageFlags.IsComponentsV2,
                 ephemeral: true
             });
@@ -638,7 +692,7 @@ client.on('interactionCreate', async (interaction) => {
 
             const safeE = getSafeEmoji(emojiInput);
             await interaction.reply({
-                components: buildSuccessUI("อัพเดทอีโมจิสำเร็จ", `เปลี่ยนอีโมจิยืนยันตัวตนเป็น ${safeE} เรียบร้อยแล้ว\n\n*(พิมพ์ \`/ยืนยันตัวตน\` อีกครั้งเพื่อส่งปุ่มด้วยอีโมจิใหม่)*`),
+                components: buildSuccessUI("อัปเดทอีโมจิสำเร็จ", `เปลี่ยนอีโมจิยืนยันตัวตนเป็น ${safeE} เรียบร้อยแล้ว\n\n*(พิมพ์ \`/ยืนยันตัวตน\` อีกครั้งเพื่อส่งปุ่มด้วยอีโมจิใหม่)*`),
                 flags: MessageFlags.IsComponentsV2,
                 ephemeral: true
             });
