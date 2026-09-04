@@ -355,7 +355,18 @@ function createVerifyComponentsV2(vEmoji = "✅") {
                 type: 10, // ComponentType.TextDisplay
                 content: 
                     "## ✔️ ระบบยืนยันตัวตน | Roblox Verification\n" +
-                    "ยินดีต้อนรับสู่ระบบยืนยันตัวตน กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" +
+                    "ยินดีต้อนรับสู่ระบบยืนยันตัวตน กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" 
+            },
+            // 3. Separator (เส้นคั่น)
+            {
+                type: 14, // ComponentType.Separator
+                divider: true,
+                spacing: 1
+            },
+
+            {
+                type: 10, // ComponentType.TextDisplay
+                content: 
                     "**📌 สิ่งที่คุณต้องเตรียม:**\n" +
                     "• ชื่อผู้ใช้ Roblox (Username)\n" +
                     "• เข้าร่วมกลุ่ม Roblox ที่กำหนดให้เรียบร้อย\n" +
