@@ -14,8 +14,8 @@ const {
     TextInputBuilder,
     TextInputStyle,
     InteractionType,
-    ComponentType,
-    parseEmoji
+    parseEmoji,
+    MessageFlags
 } = require('discord.js');
 
 // ==========================================
@@ -27,7 +27,6 @@ const DB_PATH = process.env.DB_PATH || "database.db";
 
 const GIF_URL = "https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025&";
 
-const COLOR_PRIMARY = 0xF1C40F; // เปลี่ยนเป็นสีทอง/เหลือง ตามขอบกรอบ UI ในรูปตัวอย่าง
 const COLOR_SUCCESS = 0x2ECC71;
 const COLOR_ERROR   = 0xE74C3C;
 const COLOR_INFO    = 0x3498DB;
@@ -343,16 +342,56 @@ const client = new Client({
     ]
 });
 
-// ฟังก์ชันสร้าง ActionRow สำหรับปุ่มกด ให้รวมเข้าไปใน UI
-function createVerifyView(emojiStr = "✅") {
-    const safeEmoji = getSafeEmoji(emojiStr);
-    const btn = new ButtonBuilder()
-        .setCustomId("persistent_verify")
-        .setLabel("ยืนยันตัวตนที่นี่")
-        .setStyle(ButtonStyle.Primary) // ปุ่มสีน้ำเงิน
-        .setEmoji(safeEmoji);
+// ฟังก์ชันสร้าง UI แบบ COMPONENTS V2 (ขังปุ่มอยู่ใน Container เดียวกับ Text & Banner)
+function createVerifyComponentsV2(vEmoji = "✅") {
+    const safeEmoji = getSafeEmoji(vEmoji);
+    const emojiObj = typeof safeEmoji === 'object' ? safeEmoji : { name: safeEmoji };
 
-    return new ActionRowBuilder().addComponents(btn);
+    const container = {
+        type: 17, // ComponentType.Container
+        components: [
+            // 1. Text Section
+            {
+                type: 10, // ComponentType.TextDisplay
+                content: 
+                    "## ✔️ ระบบยืนยันตัวตน | Roblox Verification\n" +
+                    "ยินดีต้อนรับสู่ระบบยืนยันตัวตน กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" +
+                    "**📌 สิ่งที่คุณต้องเตรียม:**\n" +
+                    "• ชื่อผู้ใช้ Roblox (Username)\n" +
+                    "• เข้าร่วมกลุ่ม Roblox ที่กำหนดให้เรียบร้อย\n" +
+                    "• เข้าแมพ ที่ได้ทำการส่งไปให้\n" +
+                    "• หลังเข้าเกมแล้วพิมพ์ ยืนยัน แล้วจะขึ้น หน้าต่าง แล้วกดยืนยันตัวตนได้เลย"
+            },
+            // 2. Banner Image
+            {
+                type: 12, // ComponentType.MediaGallery
+                items: [
+                    { media: { url: GIF_URL } }
+                ]
+            },
+            // 3. Separator (เส้นคั่น)
+            {
+                type: 14, // ComponentType.Separator
+                divider: true,
+                spacing: 1
+            },
+            // 4. Button inside Container
+            {
+                type: 1, // ComponentType.ActionRow
+                components: [
+                    {
+                        type: 2, // ComponentType.Button
+                        custom_id: "persistent_verify",
+                        label: "ยืนยันตัวตนที่นี่",
+                        style: 1, // ButtonStyle.Primary
+                        emoji: emojiObj
+                    }
+                ]
+            }
+        ]
+    };
+
+    return [container];
 }
 
 function createReVerifyView() {
@@ -470,34 +509,15 @@ client.on('interactionCreate', async (interaction) => {
             const settings = await getGuildSettings(interaction.guildId);
             const vEmoji = settings.verified_emoji || "✅";
 
-            // ปรับแต่ง Embed หน้าจอ UI หลักให้มีโครงสร้างสวยงามเหมือนรูปตัวอย่าง
-            const embed = new EmbedBuilder()
-                .setTitle("✔️ ระบบยืนยันตัวตน | Roblox Verification")
-                .setDescription(
-                    "ยินดีต้อนรับสู่ระบบยืนยันตัวตน กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" +
-                    "**📌 สิ่งที่คุณต้องเตรียม:**\n" +
-                    "• ชื่อผู้ใช้ Roblox (Username)\n" +
-                    "• เข้าร่วมกลุ่ม Roblox ที่กำหนดให้เรียบร้อย\n" +
-                    "• เข้าแมพ ที่ได้ทำการส่งไปให้\n" +
-                    "• หลังเข้าเกมแล้วพิมพ์ ยืนยัน แล้วจะขึ้น หน้าต่าง แล้วกดยืนยันตัวตนได้เลย"
-                )
-                .setColor(COLOR_PRIMARY)
-                .setImage(GIF_URL)
-                .setFooter({ text: "Roblox Verification Management System • Dev by : dewanoi123" });
-
-            if (interaction.guild && interaction.guild.iconURL()) {
-                embed.setThumbnail(interaction.guild.iconURL());
-            }
-
-            // ส่ง Embed และ Components พร้อมกันเพื่อให้ Discord รวบปุ่มเข้าไปในกรอบ UI
+            // ส่งผ่านระบบ Components V2
             await interaction.channel.send({
-                embeds: [embed],
-                components: [createVerifyView(vEmoji)]
+                components: createVerifyComponentsV2(vEmoji),
+                flags: MessageFlags.IsComponentsV2
             });
 
             const confirmEmbed = new EmbedBuilder()
                 .setTitle("✅ ดำเนินการสำเร็จ")
-                .setDescription("ติดตั้งข้อความระบบยืนยันตัวตนลงในช่องนี้เรียบร้อยแล้ว")
+                .setDescription("ติดตั้งข้อความระบบยืนยันตัวตน (Components V2 UI) เรียบร้อยแล้ว")
                 .setColor(COLOR_SUCCESS);
 
             await interaction.reply({ embeds: [confirmEmbed], ephemeral: true });
