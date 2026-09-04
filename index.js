@@ -1,5 +1,5 @@
 const express = require('express');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 const {
     Client,
@@ -27,11 +27,11 @@ const DB_PATH = process.env.DB_PATH || "database.db";
 
 const GIF_URL = "https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025&";
 
-const COLOR_PRIMARY = 0x4dff00;   // Dark Theme Elegance
-const COLOR_SUCCESS = 0x2ECC71;   // Vivid Emerald
-const COLOR_ERROR   = 0xE74C3C;   // Crimson Red
-const COLOR_INFO    = 0x3498DB;   // Deep Cyber Blue
-const COLOR_ACCENT  = 0xF1C40F;   // Gold Accent
+const COLOR_PRIMARY = 0x4dff00;
+const COLOR_SUCCESS = 0x2ECC71;
+const COLOR_ERROR   = 0xE74C3C;
+const COLOR_INFO    = 0x3498DB;
+const COLOR_ACCENT  = 0xF1C40F;
 
 const DEFAULT_SETTINGS = {
     roblox_group_id: 33852603,
@@ -49,54 +49,46 @@ const DEFAULT_SETTINGS = {
         guest: null,
     },
     rank_prefixes: {
-        // --- ชั้นประทวน (OR-1 ถึง OR-9) ---
-        "or-1": "OR-1, PVT",
-        "or-2": "OR-2, PFC",
-        "or-3": "OR-3, LCPL",
-        "or-4": "OR-4, CPL",
-        "or-5": "OR-5, SGT",
-        "or-6": "OR-6, SM3",
-        "or-7": "OR-7, SM2",
-        "or-8": "OR-8, SM1",
-        "or-9": "OR-9, SMS",
-
-        // --- นายทหารสัญญาบัตร (OF-D ถึง OF-9) ---
-        "of-d": "OF-D, ACO",
-        "of-1a": "OF-1A, 2LT",
-        "of-1b": "OF-1B, 1LT",
-        "of-2": "OF-2, CPT",
-        "of-3": "OF-3, MAJ",
-        "of-4": "OF-4, LTC",
-        "of-5": "OF-5, COL",
-        "of-6": "OF-6, SRCOL",
-        "of-7": "OF-7, MG",
-        "of-8": "OF-8, LTG",
-        "of-9": "OF-9, GEN",
-
-        // --- การเมือง / จอมพล / ราชวงศ์ ---
-        "deputy prime minister": "DPM",
-        "prime minister": "PM",
-        "mom rajawongse": "M.R.",
-        "his serene highness": "H.S.H. Prince",
-        "her highness": "H.H. Princess",
-        "his royal highness": "H.R.H. Prince",
-        "field marshal": "OF-10, FMS",
-        "royal protectorate": "Protectorate",
-        "crown prince": "Crown Prince",
-        "her majesty": "H.M. Queen",
-        "his majesty": "H.M. King"
+        "or-1": "OR-1, PVT", "or-2": "OR-2, PFC", "or-3": "OR-3, LCPL", "or-4": "OR-4, CPL",
+        "or-5": "OR-5, SGT", "or-6": "OR-6, SM3", "or-7": "OR-7, SM2", "or-8": "OR-8, SM1",
+        "or-9": "OR-9, SMS", "of-d": "OF-D, ACO", "of-1a": "OF-1A, 2LT", "of-1b": "OF-1B, 1LT",
+        "of-2": "OF-2, CPT", "of-3": "OF-3, MAJ", "of-4": "OF-4, LTC", "of-5": "OF-5, COL",
+        "of-6": "OF-6, SRCOL", "of-7": "OF-7, MG", "of-8": "OF-8, LTG", "of-9": "OF-9, GEN",
+        "deputy prime minister": "DPM", "prime minister": "PM", "mom rajawongse": "M.R.",
+        "his serene highness": "H.S.H. Prince", "her highness": "H.H. Princess",
+        "his royal highness": "H.R.H. Prince", "field marshal": "OF-10, FMS",
+        "royal protectorate": "Protectorate", "crown prince": "Crown Prince",
+        "her majesty": "H.M. Queen", "his majesty": "H.M. King"
     }
 };
 
 const DEVELOPER_IDS = [2769442731];
 
 // ==========================================
-// DATABASE UTILITIES
+// DATABASE UTILITIES (sqlite3)
 // ==========================================
-const db = new Database(DB_PATH);
+const db = new sqlite3.Database(DB_PATH);
 
-function initDb() {
-    db.prepare(`
+function dbRun(query, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(query, params, function (err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+}
+
+function dbGet(query, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(query, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+        });
+    });
+}
+
+async function initDb() {
+    await dbRun(`
         CREATE TABLE IF NOT EXISTS users (
             discord_id TEXT PRIMARY KEY,
             roblox_id TEXT,
@@ -104,21 +96,21 @@ function initDb() {
             verified INTEGER DEFAULT 0,
             pending_roblox_username TEXT
         )
-    `).run();
+    `);
 
-    db.prepare(`
+    await dbRun(`
         CREATE TABLE IF NOT EXISTS guild_settings (
             guild_id TEXT PRIMARY KEY,
             settings_json TEXT
         )
-    `).run();
+    `);
 }
 initDb();
 
-function getGuildSettings(guildId) {
+async function getGuildSettings(guildId) {
     if (!guildId) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
-    const row = db.prepare("SELECT settings_json FROM guild_settings WHERE guild_id = ?").get(String(guildId));
+    const row = await dbGet("SELECT settings_json FROM guild_settings WHERE guild_id = ?", [String(guildId)]);
     let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
     if (row && row.settings_json) {
@@ -140,13 +132,13 @@ function getGuildSettings(guildId) {
     return settings;
 }
 
-function saveGuildSettings(guildId, settings) {
+async function saveGuildSettings(guildId, settings) {
     if (!guildId) return;
-    db.prepare(`
+    await dbRun(`
         INSERT INTO guild_settings (guild_id, settings_json)
         VALUES (?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET settings_json = excluded.settings_json
-    `).run(String(guildId), JSON.stringify(settings));
+    `, [String(guildId), JSON.stringify(settings)]);
 }
 
 function parseId(val) {
@@ -155,12 +147,12 @@ function parseId(val) {
     return match ? match[0] : null;
 }
 
-function getUser(discordId) {
-    return db.prepare("SELECT * FROM users WHERE discord_id = ?").get(String(discordId));
+async function getUser(discordId) {
+    return await dbGet("SELECT * FROM users WHERE discord_id = ?", [String(discordId)]);
 }
 
-function updatePending(discordId, robloxId, username) {
-    db.prepare(`
+async function updatePending(discordId, robloxId, username) {
+    await dbRun(`
         INSERT INTO users (discord_id, roblox_id, roblox_username, pending_roblox_username, verified)
         VALUES (?, ?, ?, ?, 0)
         ON CONFLICT(discord_id) DO UPDATE SET
@@ -168,7 +160,7 @@ function updatePending(discordId, robloxId, username) {
             roblox_username = excluded.roblox_username,
             pending_roblox_username = excluded.pending_roblox_username,
             verified = 0
-    `).run(String(discordId), String(robloxId), String(username), String(username).trim().toLowerCase());
+    `, [String(discordId), String(robloxId), String(username), String(username).trim().toLowerCase()]);
 }
 
 function getSafeEmoji(emojiStr) {
@@ -269,7 +261,7 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
         return { rankVal: null, displayName: null, rankName: null, errMsg: "ไม่พบเซิร์ฟเวอร์ Discord ของบอท" };
     }
 
-    const settings = getGuildSettings(guild.id);
+    const settings = await getGuildSettings(guild.id);
 
     try {
         const member = await guild.members.fetch(String(discordId));
@@ -283,7 +275,6 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
         ]);
         managedRoleIds.delete(null);
 
-        // ดึง Role เดิมที่ไม่ได้อยู่ในกลุ่ม Managed Roles
         let rolesToKeep = member.roles.cache.filter(role => role.id !== guild.id && !managedRoleIds.has(role.id));
         let newRoleIds = new Set(rolesToKeep.map(r => r.id));
 
@@ -320,7 +311,6 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
             displayRankName = "Guest";
         }
 
-        // อัปเดต Roles และ Nickname ให้กับสมาชิก
         await member.roles.set(Array.from(newRoleIds));
         await member.setNickname(nickname.substring(0, 32));
 
@@ -353,7 +343,6 @@ const client = new Client({
     ]
 });
 
-// ฟังก์ชันสำหรับส่ง UI หลักพร้อมปุ่มกดยืนยันตัวตน
 function createVerifyView(emojiStr = "✅") {
     const safeEmoji = getSafeEmoji(emojiStr);
     const btn = new ButtonBuilder()
@@ -365,7 +354,6 @@ function createVerifyView(emojiStr = "✅") {
     return new ActionRowBuilder().addComponents(btn);
 }
 
-// ฟังก์ชันสร้าง UI สำหรับคนยืนยันแล้ว (ReVerify View)
 function createReVerifyView() {
     const btnUpdate = new ButtonBuilder()
         .setCustomId("update_rank")
@@ -382,7 +370,6 @@ function createReVerifyView() {
     return new ActionRowBuilder().addComponents(btnUpdate, btnChange);
 }
 
-// ลงทะเบียน Slash Commands เมื่อ Bot พร้อมทำงาน
 client.once('ready', async () => {
     console.log(`[BOT] Logged in as ${client.user.tag}`);
 
@@ -472,17 +459,14 @@ client.once('ready', async () => {
 });
 
 // ==========================================
-// INTERACTION HANDLERS (Buttons, Modals, Commands)
+// INTERACTION HANDLERS
 // ==========================================
 client.on('interactionCreate', async (interaction) => {
-    // --------------------------------------
-    // 1. SLASH COMMANDS
-    // --------------------------------------
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
 
         if (commandName === "ยืนยันตัวตน") {
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
             const vEmoji = settings.verified_emoji || "✅";
 
             const embed = new EmbedBuilder()
@@ -519,10 +503,10 @@ client.on('interactionCreate', async (interaction) => {
         else if (commandName === "ตั้งค่าอีโมจิ") {
             if (!interaction.guildId) return;
             const emojiInput = interaction.options.getString("อีโมจิ").trim();
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
 
             settings.verified_emoji = emojiInput;
-            saveGuildSettings(interaction.guildId, settings);
+            await saveGuildSettings(interaction.guildId, settings);
 
             const safeE = getSafeEmoji(emojiInput);
             const embed = new EmbedBuilder()
@@ -534,7 +518,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         else if (commandName === "ล้างข้อมูล" || commandName === "ล้างข้อมูลทั้งหมด") {
-            db.prepare("DELETE FROM users").run();
+            await dbRun("DELETE FROM users");
             const embed = new EmbedBuilder()
                 .setTitle("⚠️ ล้างข้อมูลสำเร็จ")
                 .setDescription("ลบข้อมูลการยืนยันตัวตนทั้งหมดในระบบแล้ว ผู้ใช้ทุกคนจะต้องทำการยืนยันตัวตนใหม่")
@@ -547,14 +531,14 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.guildId) return;
             const roleType = interaction.options.getString("ประเภท");
             const role = interaction.options.getRole("โรล");
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
 
             if (roleType === "verified" || roleType === "developer") {
                 settings[`${roleType}_role_id`] = role.id;
             } else {
                 settings.role_ids[roleType] = role.id;
             }
-            saveGuildSettings(interaction.guildId, settings);
+            await saveGuildSettings(interaction.guildId, settings);
 
             const embed = new EmbedBuilder()
                 .setTitle("🏷️ ตั้งค่าบทบาทสำเร็จ")
@@ -569,9 +553,9 @@ client.on('interactionCreate', async (interaction) => {
             const rankCode = interaction.options.getString("ยศ").trim();
             const title = interaction.options.getString("คำนำหน้า").trim();
 
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
             settings.rank_prefixes[rankCode.toLowerCase()] = `${rankCode}, ${title}`;
-            saveGuildSettings(interaction.guildId, settings);
+            await saveGuildSettings(interaction.guildId, settings);
 
             const embed = new EmbedBuilder()
                 .setTitle("🏷️ เพิ่มคำนำหน้าสำเร็จ")
@@ -634,7 +618,7 @@ client.on('interactionCreate', async (interaction) => {
 
         else if (commandName === "ดูการตั้งค่า") {
             if (!interaction.guildId) return;
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
             const roleIds = settings.role_ids || {};
             const vEmoji = settings.verified_emoji || "✅";
 
@@ -666,17 +650,13 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // --------------------------------------
-    // 2. BUTTON INTERACTIONS
-    // --------------------------------------
     else if (interaction.isButton()) {
         const customId = interaction.customId;
 
-        // ปุ่มยืนยันตัวตนหน้าหลัก
         if (customId === "persistent_verify") {
-            const user = getUser(interaction.user.id);
+            const user = await getUser(interaction.user.id);
             if (user && user.verified) {
-                const settings = getGuildSettings(interaction.guildId);
+                const settings = await getGuildSettings(interaction.guildId);
                 const safeVEmoji = getSafeEmoji(settings.verified_emoji || "✅");
 
                 const embed = new EmbedBuilder()
@@ -697,7 +677,6 @@ client.on('interactionCreate', async (interaction) => {
                     ephemeral: true
                 });
             } else {
-                // เปิด Modal กรอก Roblox Username
                 const modal = new ModalBuilder()
                     .setCustomId("verify_modal")
                     .setTitle("⚡ ยืนยันตัวตน ROBLOX");
@@ -716,10 +695,9 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // ปุ่มอัปเดทยศ (ReVerify)
         else if (customId === "update_rank") {
             await interaction.deferReply({ ephemeral: true });
-            const user = getUser(interaction.user.id);
+            const user = await getUser(interaction.user.id);
 
             if (!user || !user.roblox_id) {
                 const embed = new EmbedBuilder()
@@ -746,7 +724,7 @@ client.on('interactionCreate', async (interaction) => {
                 return;
             }
 
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
             const safeVEmoji = getSafeEmoji(settings.verified_emoji || "✅");
 
             const embed = new EmbedBuilder()
@@ -762,7 +740,6 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ embeds: [embed] });
         }
 
-        // ปุ่มเปลี่ยน Account
         else if (customId === "change_acc") {
             const modal = new ModalBuilder()
                 .setCustomId("verify_modal")
@@ -782,11 +759,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // --------------------------------------
-    // 3. MODAL SUBMIT HANDLERS
-    // --------------------------------------
     else if (interaction.type === InteractionType.ModalSubmit) {
-        // Modal กรอกชื่อ Roblox
         if (interaction.customId === "verify_modal") {
             const inputName = interaction.fields.getTextInputValue("roblox_username").trim();
             const { robloxId, name: correctName } = await getRobloxInfoByName(inputName);
@@ -802,7 +775,7 @@ client.on('interactionCreate', async (interaction) => {
                 return;
             }
 
-            const settings = getGuildSettings(interaction.guildId);
+            const settings = await getGuildSettings(interaction.guildId);
             const isDev = DEVELOPER_IDS.includes(parseInt(robloxId, 10));
             const groupInfo = await checkGroupMembership(robloxId, settings.roblox_group_id);
 
@@ -821,7 +794,7 @@ client.on('interactionCreate', async (interaction) => {
                 return;
             }
 
-            updatePending(interaction.user.id, robloxId, correctName);
+            await updatePending(interaction.user.id, robloxId, correctName);
 
             const embed = new EmbedBuilder()
                 .setTitle("📥 ขั้นตอนถัดไป: ยืนยันตัวตนในเกม")
@@ -837,12 +810,11 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
-        // Modal ปรับแต่งทั้งหมด (Customize All)
         else if (interaction.customId === "customize_all_modal") {
             const guildId = interaction.guildId;
             if (!guildId) return;
 
-            const settings = getGuildSettings(guildId);
+            const settings = await getGuildSettings(guildId);
 
             const gidVal = interaction.fields.getTextInputValue("group_id").trim();
             const gUrlVal = interaction.fields.getTextInputValue("group_url").trim();
@@ -891,7 +863,7 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            saveGuildSettings(guildId, settings);
+            await saveGuildSettings(guildId, settings);
 
             const embed = new EmbedBuilder()
                 .setTitle("✅ บันทึกการตั้งค่าเรียบร้อย")
@@ -904,7 +876,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// EXPRESS WEBHOOK (เทียบเท่า FastAPI /verify)
+// EXPRESS WEBHOOK
 // ==========================================
 const app = express();
 app.use(express.json());
@@ -913,18 +885,18 @@ app.post('/verify', async (req, res) => {
     const { robloxId, robloxUsername, guildId } = req.body;
     const searchName = String(robloxUsername || "").trim().toLowerCase();
 
-    let row = db.prepare(`
+    let row = await dbGet(`
         SELECT discord_id FROM users
         WHERE roblox_id = ? AND verified = 0
         ORDER BY rowid DESC LIMIT 1
-    `).get(String(robloxId));
+    `, [String(robloxId)]);
 
     if (!row) {
-        row = db.prepare(`
+        row = await dbGet(`
             SELECT discord_id FROM users
             WHERE LOWER(pending_roblox_username) = ? AND verified = 0
             ORDER BY rowid DESC LIMIT 1
-        `).get(searchName);
+        `, [searchName]);
     }
 
     if (!row) {
@@ -937,12 +909,12 @@ app.post('/verify', async (req, res) => {
     const result = await updateMemberStatus(row.discord_id, robloxId, robloxUsername, guildId);
 
     if (result.rankVal !== null) {
-        db.prepare(`
+        await dbRun(`
             UPDATE users
             SET roblox_id = ?, roblox_username = ?, verified = 1,
                 pending_roblox_username = NULL
             WHERE discord_id = ?
-        `).run(String(robloxId), String(robloxUsername).trim(), row.discord_id);
+        `, [String(robloxId), String(robloxUsername).trim(), row.discord_id]);
 
         return res.json({
             ok: true,
@@ -957,14 +929,10 @@ app.post('/verify', async (req, res) => {
     });
 });
 
-// Start Express Server
 app.listen(PORT, () => {
     console.log(`[HTTP] Webhook server listening on port ${PORT}`);
 });
 
-// ==========================================
-// START BOT
-// ==========================================
 if (DISCORD_TOKEN) {
     client.login(DISCORD_TOKEN);
 } else {
