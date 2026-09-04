@@ -338,20 +338,18 @@ async function updateMemberStatus(discordId, robloxId, robloxUsername, guildId =
 }
 
 // ==========================================
-// COMPONENTS V2 UI BUILDERS (พร้อมปุ่มตามสถานะ)
+// COMPONENTS V2 UI BUILDERS
 // ==========================================
 
 // 1. หน้า UI หลัก (ยืนยันตัวตน + เช็คบทบาท)
 function buildMainVerifyUI(guild, vEmoji = "✅", isVerified = false) {
-    const guildIcon = guild && guild.iconURL() ? guild.iconURL() : null;
-
     const componentsList = [
         {
             type: 10,
             content: 
                 "# 🛡️ ROBLOX VERIFICATION SYSTEM\n" +
                 "### ระบบยืนยันตัวตนและจัดการยศอัตโนมัติ\n\n" +
-                "ยินดีต้อนรับสู่ระบบยืนยันตัวตน! กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเชื่อมโยงบัญชี Discord เข้ากับ Roblox\n\n" +
+                "ยินดีต้อนรับสู่ระบบยืนยันตัวตน! กรุณากดปุ่ม **`ยืนยันตัวตนที่นี่`** ด้านล่างเพื่อเริ่มต้นขั้นตอนผูกบัญชี Discord เข้ากับ Roblox\n\n" +
                 "**📌 สิ่งที่คุณต้องเตรียมพร้อม:**\n" +
                 "└ 👤 **Roblox Username** (ชื่อผู้ใช้ของคุณ)\n" +
                 "└ 🛡️ **Roblox Group** (เข้าร่วมกลุ่มให้เรียบร้อย)\n" +
@@ -359,31 +357,31 @@ function buildMainVerifyUI(guild, vEmoji = "✅", isVerified = false) {
                 "└ 💬 พิมพ์คำว่า `ยืนยัน` ภายในเกมเพื่อเสร็จสิ้นขั้นตอน"
         },
         {
-            type: 12, // Banner Gallery
+            type: 12,
             items: [{ media: { url: GIF_URL } }]
         },
         {
-            type: 14, // Separator
+            type: 14,
             divider: true,
             spacing: 1
         },
         {
-            type: 1, // ActionRow
+            type: 1,
             components: [
                 {
                     type: 2,
                     custom_id: "persistent_verify",
                     label: "ยืนยันตัวตนที่นี่",
-                    style: isVerified ? 2 : 1, // 2=Secondary(Gray), 1=Primary(Blue)
-                    disabled: isVerified,     // ถ้ายืนยันแล้วจะกดไม่ได้
+                    style: isVerified ? 2 : 1,
+                    disabled: isVerified,
                     emoji: formatEmojiForComponent(vEmoji)
                 },
                 {
                     type: 2,
                     custom_id: "check_role",
                     label: "เช็คบทบาท",
-                    style: isVerified ? 3 : 2, // 3=Success(Green), 2=Secondary(Gray)
-                    disabled: !isVerified,    // ถ้ายังไม่ยืนยันจะกดไม่ได้
+                    style: isVerified ? 3 : 2,
+                    disabled: !isVerified,
                     emoji: { name: "🔍" }
                 }
             ]
@@ -391,7 +389,7 @@ function buildMainVerifyUI(guild, vEmoji = "✅", isVerified = false) {
     ];
 
     return [{
-        type: 17, // Container
+        type: 17,
         components: componentsList
     }];
 }
@@ -424,20 +422,20 @@ function buildRoleDetailsUI(username, robloxId, rankName, prefix) {
                 spacing: 1
             },
             {
-                type: 1, // ActionRow (ปุ่ม อัปเดทยศ + เปลี่ยน Account อยู่คู่กัน)
+                type: 1,
                 components: [
                     {
                         type: 2,
                         custom_id: "update_rank",
                         label: "อัปเดทยศ",
-                        style: 3, // Success Green
+                        style: 3,
                         emoji: { name: "🔄" }
                     },
                     {
                         type: 2,
                         custom_id: "change_acc",
                         label: "เปลี่ยน Account",
-                        style: 2, // Secondary Gray
+                        style: 2,
                         emoji: { name: "🔁" }
                     }
                 ]
@@ -499,31 +497,63 @@ function buildSuccessUI(title, description) {
     }];
 }
 
-// 6. UI แสดงการตั้งค่าเซิร์ฟเวอร์
+// 6. UI แสดงการตั้งค่าเซิร์ฟเวอร์ (แสดงผลครบถ้วนแบบในรูปเป๊ะๆ)
 function buildSettingsUI(settings) {
     const roleIds = settings.role_ids || {};
     const vEmoji = settings.verified_emoji || "✅";
+
+    const rolesFmt = 
+        `• **OR:** \`${roleIds.or || 'None'}\`\n` +
+        `• **CD (นายร้อย):** \`${roleIds.cd || 'None'}\`\n` +
+        `• **OF Low:** \`${roleIds.of_low || 'None'}\`\n` +
+        `• **OF High:** \`${roleIds.of_high || 'None'}\`\n` +
+        `• **HQ (กองบัญชาการ):** \`${roleIds.hq || 'None'}\`\n` +
+        `• **Guest:** \`${roleIds.guest || 'None'}\``;
+
+    const prefixEntries = Object.entries(settings.rank_prefixes || {});
+    const midPoint = Math.ceil(prefixEntries.length / 2);
+    const part1 = prefixEntries.slice(0, midPoint).map(([k, v]) => `\`${k}\` ➔ ${v}`).join("\n");
+    const part2 = prefixEntries.slice(midPoint).map(([k, v]) => `\`${k}\` ➔ ${v}`).join("\n");
 
     return [{
         type: 17,
         components: [
             {
                 type: 10,
+                content: "# ⚙️ การตั้งค่าระบบปัจจุบัน (Server Settings)"
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 10,
                 content: 
-                    "# ⚙️ SERVER CONFIGURATIONS\n\n" +
-                    "### 📌 General Settings\n" +
-                    `└ **Roblox Group ID:** \`${settings.roblox_group_id}\`\n` +
-                    `└ **Verified Role ID:** \`${settings.verified_role_id}\`\n` +
-                    `└ **Verification Emoji:** ${vEmoji}\n\n` +
-                    "### 🎭 Role Binding IDs\n" +
-                    "```ini\n" +
-                    `[OR]     = ${roleIds.or || 'Not Set'}\n` +
-                    `[CD]     = ${roleIds.cd || 'Not Set'}\n` +
-                    `[OF LOW] = ${roleIds.of_low || 'Not Set'}\n` +
-                    `[OF HIGH]= ${roleIds.of_high || 'Not Set'}\n` +
-                    `[HQ]     = ${roleIds.hq || 'Not Set'}\n` +
-                    `[GUEST]  = ${roleIds.guest || 'Not Set'}\n` +
-                    "```"
+                    `📌 **Group ID:** \`${settings.roblox_group_id}\`   ✅ **Verified Role ID:** \`${settings.verified_role_id || 'None'}\`   🎨 **Verification Emoji:** ${vEmoji}\n\n` +
+                    `🎭 **Role Configs**\n${rolesFmt}`
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 10,
+                content: `🏷️ **Rank Prefixes**\n${part1}`
+            },
+            {
+                type: 10,
+                content: part2 || "*ไม่มีข้อมูลเพิ่มเติม*"
+            },
+            {
+                type: 14,
+                divider: true,
+                spacing: 1
+            },
+            {
+                type: 10,
+                content: "*Configuration Panel • Dev by : dewanoi123*"
             }
         ]
     }];
@@ -636,7 +666,6 @@ client.on('interactionCreate', async (interaction) => {
                 const settings = await getGuildSettings(interaction.guildId);
                 const vEmoji = settings.verified_emoji || "✅";
 
-                // ส่งหน้าจอหลักแบบ Components V2
                 await interaction.channel.send({
                     components: buildMainVerifyUI(interaction.guild, vEmoji, false),
                     flags: MessageFlags.IsComponentsV2
@@ -776,7 +805,6 @@ client.on('interactionCreate', async (interaction) => {
         else if (interaction.isButton()) {
             const customId = interaction.customId;
 
-            // 1. ปุ่ม ยืนยันตัวตนที่นี่
             if (customId === "persistent_verify") {
                 const user = await getUser(interaction.user.id);
                 if (user && user.verified) {
@@ -804,7 +832,6 @@ client.on('interactionCreate', async (interaction) => {
                 }
             }
 
-            // 2. ปุ่ม เช็คบทบาท (แสดงข้อมูลยศ + ปุ่มอัปเดทยศ & เปลี่ยน Account อยู่คู่กัน)
             else if (customId === "check_role") {
                 await interaction.deferReply({ ephemeral: true });
                 const user = await getUser(interaction.user.id);
@@ -817,7 +844,6 @@ client.on('interactionCreate', async (interaction) => {
                     return;
                 }
 
-                // ดึงข้อมูลยศและคำนำหน้าชื่อล่าสุด
                 const result = await updateMemberStatus(
                     interaction.user.id,
                     user.roblox_id,
@@ -831,7 +857,6 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            // 3. ปุ่ม อัปเดทยศ (กดจากในหน้าเช็คบทบาท)
             else if (customId === "update_rank") {
                 await interaction.deferReply({ ephemeral: true });
                 const user = await getUser(interaction.user.id);
@@ -868,7 +893,6 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            // 4. ปุ่ม เปลี่ยน Account
             else if (customId === "change_acc") {
                 const modal = new ModalBuilder()
                     .setCustomId("verify_modal")
