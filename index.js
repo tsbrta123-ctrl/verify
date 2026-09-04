@@ -27,7 +27,7 @@ const DB_PATH = process.env.DB_PATH || "database.db";
 
 const GIF_URL = "https://cdn.discordapp.com/attachments/1420812683124670596/1540669145161662584/original_ddaceecdd62614ddf9a488b75ef88075.gif?ex=6a8acb74&is=6a8979f4&hm=7dfcdf79662c2c31c862537e84fa6d7c0768406c383c75ab75d3cb7389be5025&";
 
-const COLOR_PRIMARY = 0x4dff00;
+const COLOR_PRIMARY = 0xF1C40F; // เปลี่ยนเป็นสีทอง/เหลือง ตามขอบกรอบ UI ในรูปตัวอย่าง
 const COLOR_SUCCESS = 0x2ECC71;
 const COLOR_ERROR   = 0xE74C3C;
 const COLOR_INFO    = 0x3498DB;
@@ -343,12 +343,13 @@ const client = new Client({
     ]
 });
 
+// ฟังก์ชันสร้าง ActionRow สำหรับปุ่มกด ให้รวมเข้าไปใน UI
 function createVerifyView(emojiStr = "✅") {
     const safeEmoji = getSafeEmoji(emojiStr);
     const btn = new ButtonBuilder()
         .setCustomId("persistent_verify")
         .setLabel("ยืนยันตัวตนที่นี่")
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Primary) // ปุ่มสีน้ำเงิน
         .setEmoji(safeEmoji);
 
     return new ActionRowBuilder().addComponents(btn);
@@ -469,6 +470,7 @@ client.on('interactionCreate', async (interaction) => {
             const settings = await getGuildSettings(interaction.guildId);
             const vEmoji = settings.verified_emoji || "✅";
 
+            // ปรับแต่ง Embed หน้าจอ UI หลักให้มีโครงสร้างสวยงามเหมือนรูปตัวอย่าง
             const embed = new EmbedBuilder()
                 .setTitle("✔️ ระบบยืนยันตัวตน | Roblox Verification")
                 .setDescription(
@@ -487,6 +489,7 @@ client.on('interactionCreate', async (interaction) => {
                 embed.setThumbnail(interaction.guild.iconURL());
             }
 
+            // ส่ง Embed และ Components พร้อมกันเพื่อให้ Discord รวบปุ่มเข้าไปในกรอบ UI
             await interaction.channel.send({
                 embeds: [embed],
                 components: [createVerifyView(vEmoji)]
